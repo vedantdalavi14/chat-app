@@ -4,6 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth'); // Import the auth routes
+const userRoutes = require('./routes/users'); // Import the users routes
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,6 +21,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // API Routes
 app.use('/auth', authRoutes); 
+app.use('/users', userRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');
