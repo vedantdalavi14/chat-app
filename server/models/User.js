@@ -6,6 +6,11 @@ const UserSchema = new mongoose.Schema({
         required: true,
         unique: true,
     },
+    // --- NEW FIELD ---
+    displayName: {
+        type: String,
+        default: '',
+    },
     password: {
         type: String,
         required: true,
@@ -14,7 +19,10 @@ const UserSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
-}, { timestamps: true }); // Adds createdAt and updatedAt timestamps
+    avatarUrl: {
+        type: String,
+        default: '',
+    },
+}, { timestamps: true });
 
-// This is the crucial line that exports the model
 module.exports = mongoose.model('User', UserSchema);

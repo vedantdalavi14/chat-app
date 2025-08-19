@@ -5,27 +5,43 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  Button,
   Alert,
+  Image,
+  RefreshControl,
+  SafeAreaView,
+  Platform, // Import Platform
+  StatusBar, // Import StatusBar
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socket from '../socket';
-import { useFocusEffect } from '@react-navigation/native'; // Import useFocusEffect
+import { useFocusEffect } from '@react-navigation/native';
 
 const API_URL = 'http://192.168.1.8:5000';
 
 const formatTimestamp = (date) => {
   if (!date) return '';
   const messageDate = new Date(date);
-  return messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  
+  if (messageDate.toDateString() === now.toDateString()) {
+    return messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (messageDate.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+
+  return messageDate.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: '2-digit' });
 };
 
-const HomeScreen = ({ navigation, authContext }) => {
+const HomeScreen = ({ navigation }) => {
   const [users, setUsers] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Wrap fetchUsers in useCallback to prevent it from being recreated on every render
   const fetchUsers = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -35,7 +51,6 @@ const HomeScreen = ({ navigation, authContext }) => {
             authorization: `Bearer ${token}`,
           },
         });
-        // Sort users by the most recent message
         const sortedUsers = response.data.sort((a, b) => {
             const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
             const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
@@ -49,7 +64,12 @@ const HomeScreen = ({ navigation, authContext }) => {
     }
   }, []);
 
-  // useFocusEffect runs every time the screen comes into focus
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchUsers();
+    setRefreshing(false);
+  }, [fetchUsers]);
+
   useFocusEffect(
     useCallback(() => {
       fetchUsers();
@@ -57,7 +77,6 @@ const HomeScreen = ({ navigation, authContext }) => {
   );
 
   useEffect(() => {
-    // This effect runs once to set up socket listeners
     const handleUsersOnline = (onlineUserIds) => setOnlineUsers(new Set(onlineUserIds));
     const handleUserConnected = (userId) => setOnlineUsers((prev) => new Set(prev).add(userId));
     const handleUserDisconnected = (userId) => {
@@ -68,17 +87,14 @@ const HomeScreen = ({ navigation, authContext }) => {
       });
     };
 
-    // This handles real-time updates for incoming messages
     const handleNewMessage = (newMessage) => {
       setUsers(prevUsers => {
         const updatedUsers = prevUsers.map(user => {
-          // Update the last message if the user is the sender or receiver
           if (user._id === newMessage.sender || user._id === newMessage.receiver) {
             return { ...user, lastMessage: newMessage };
           }
           return user;
         });
-        // Sort again to bring the latest conversation to the top
         return updatedUsers.sort((a, b) => {
             const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
             const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
@@ -100,47 +116,59 @@ const HomeScreen = ({ navigation, authContext }) => {
     };
   }, []);
 
-  const handleLogout = () => {
-    authContext.signOut();
-  };
-
   const renderUser = ({ item }) => {
     const isOnline = onlineUsers.has(item._id);
+    const nameToDisplay = item.displayName || item.username;
 
     return (
       <TouchableOpacity
         style={styles.userItem}
-        onPress={() => navigation.navigate('Chat', { userId: item._id, username: item.username })}
+        onPress={() => navigation.navigate('Chat', { 
+            userId: item._id, 
+            username: nameToDisplay,
+            avatarUrl: item.avatarUrl // Pass the avatar URL
+        })}
       >
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}></View>
+          {item.avatarUrl ? (
+            <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatar} />
+          )}
           {isOnline && <View style={styles.onlineDot} />}
         </View>
         <View style={styles.userInfo}>
-          <Text style={styles.username}>{item.username}</Text>
+          <View style={styles.userInfoTop}>
+            <Text style={styles.username}>{nameToDisplay}</Text>
+            {item.lastMessage && (
+                <Text style={styles.timestamp}>
+                    {formatTimestamp(item.lastMessage.createdAt)}
+                </Text>
+            )}
+          </View>
           <Text style={styles.lastMessage} numberOfLines={1}>
             {item.lastMessage ? item.lastMessage.content : 'No messages yet'}
           </Text>
         </View>
-        {item.lastMessage && (
-            <Text style={styles.timestamp}>
-                {formatTimestamp(item.lastMessage.createdAt)}
-            </Text>
-        )}
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={styles.container}>
-      <Button title="Logout" onPress={handleLogout} />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Chats</Text>
+      </View>
       <FlatList
         data={users}
         renderItem={renderUser}
         keyExtractor={(item) => item._id}
         ListEmptyComponent={<Text style={styles.emptyText}>No other users found.</Text>}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -148,29 +176,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    // --- FIX: Add padding for Android status bar ---
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  header: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
   avatarContainer: {
     position: 'relative',
     marginRight: 15,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#ccc',
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: '#e0e0e0',
   },
   onlineDot: {
     width: 15,
     height: 15,
     borderRadius: 7.5,
-    backgroundColor: 'green',
+    backgroundColor: '#4CAF50',
     position: 'absolute',
     bottom: 0,
     right: 0,
@@ -179,20 +220,26 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  userInfoTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   username: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111',
   },
   lastMessage: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
-    marginTop: 2,
   },
   timestamp: {
     fontSize: 12,
-    color: '#999',
-    marginLeft: 10,
+    color: '#888',
   },
   emptyText: {
     textAlign: 'center',

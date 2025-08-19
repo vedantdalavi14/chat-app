@@ -1,20 +1,38 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'; // Import tab navigator
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { jwtDecode } from 'jwt-decode';
 
-// Import the socket instance
 import socket from './socket';
-
-// Import your screen components
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
 import ChatScreen from './screens/ChatScreen';
+import SettingsScreen from './screens/SettingsScreen'; // Import the new screen
 
 const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator(); // Create a tab navigator instance
+
+// This component will be the main UI after logging in, containing the tabs
+function AppTabs({ authContext }) {
+  return (
+    <Tab.Navigator>
+      <Tab.Screen 
+        name="Chats" 
+        // We use a function here to pass the authContext down to HomeScreen
+        children={(props) => <HomeScreen {...props} authContext={authContext} />}
+        options={{ headerShown: false }} // Hide header as HomeScreen has its own
+      />
+      <Tab.Screen 
+        name="Settings" 
+        children={(props) => <SettingsScreen {...props} authContext={authContext} />}
+      />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   const [userToken, setUserToken] = useState(null);
@@ -22,10 +40,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // This listener will fire every time the socket successfully connects
     const onConnect = () => {
       console.log('Socket connected! Announcing user is online...');
-      // To ensure we have the correct user ID, we read it from storage again
       AsyncStorage.getItem('userToken').then(token => {
         if (token) {
           const decoded = jwtDecode(token);
@@ -34,10 +50,8 @@ export default function App() {
       });
     };
 
-    // We listen for the 'connect' event
     socket.on('connect', onConnect);
 
-    // Initial check when the app loads
     const checkUserToken = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
@@ -45,7 +59,6 @@ export default function App() {
           const decodedToken = jwtDecode(token);
           setUserId(decodedToken.user.id);
           setUserToken(token);
-          // We just connect here. The 'onConnect' listener will handle the emit.
           socket.connect();
         }
       } catch (e) {
@@ -56,7 +69,6 @@ export default function App() {
 
     checkUserToken();
 
-    // Clean up the listener when the component unmounts
     return () => {
       socket.off('connect', onConnect);
     };
@@ -69,7 +81,6 @@ export default function App() {
         const decodedToken = jwtDecode(token);
         setUserId(decodedToken.user.id);
         setUserToken(token);
-        // We just connect here. The 'onConnect' listener will handle the emit.
         socket.connect();
       },
       signOut: async () => {
@@ -94,15 +105,17 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator>
         {userToken ? (
+          // If logged in, show the AppTabs and the ChatScreen in a stack
           <>
-            <Stack.Screen name="Home">
-              {(props) => <HomeScreen {...props} authContext={authContext} />}
+            <Stack.Screen name="AppTabs" options={{ headerShown: false }}>
+              {(props) => <AppTabs {...props} authContext={authContext} />}
             </Stack.Screen>
             <Stack.Screen name="Chat">
               {(props) => <ChatScreen {...props} currentUserId={userId} />}
             </Stack.Screen>
           </>
         ) : (
+          // If not logged in, show the auth screens
           <>
             <Stack.Screen name="Login" options={{ headerShown: false }}>
               {(props) => <LoginScreen {...props} authContext={authContext} />}

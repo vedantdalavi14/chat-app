@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const conversationRoutes = require('./routes/conversations');
 const Message = require('./models/Message');
+const profileRoutes = require('./routes/profile');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,6 +25,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/public', express.static('public'));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -34,6 +36,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/conversations', conversationRoutes);
+app.use('/profile', profileRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');

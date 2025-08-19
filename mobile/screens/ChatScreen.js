@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image, // Import Image
 } from 'react-native';
 import socket from '../socket';
 import axios from 'axios';
@@ -16,17 +17,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = 'http://192.168.1.8:5000';
 
+// --- NEW: Custom Header Component ---
+const ChatHeader = ({ username, avatarUrl }) => {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={{ width: 35, height: 35, borderRadius: 17.5, marginRight: 10 }} />
+      ) : (
+        // Fallback placeholder if no avatar
+        <View style={{ width: 35, height: 35, borderRadius: 17.5, marginRight: 10, backgroundColor: '#e0e0e0' }} />
+      )}
+      <Text style={{ fontSize: 17, fontWeight: '600' }}>{username}</Text>
+    </View>
+  );
+};
+
 const ChatScreen = ({ route, navigation, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false); // State to track if the other user is typing
-  const { userId: recipientId, username } = route.params;
+  const [isTyping, setIsTyping] = useState(false);
+  // Get avatarUrl from the route params passed by HomeScreen
+  const { userId: recipientId, username, avatarUrl } = route.params;
 
   const typingTimeout = useRef(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: username });
-  }, [username, navigation]);
+    // --- CHANGE: Use the custom header component ---
+    navigation.setOptions({
+      headerTitle: () => <ChatHeader username={username} avatarUrl={avatarUrl} />,
+    });
+  }, [username, avatarUrl, navigation]);
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -58,15 +78,14 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
   useEffect(() => {
     const handleNewMessage = (message) => {
       const newMessage = {
-        _id: Math.random().toString(),
-        text: message.text,
-        createdAt: new Date(),
-        user: { _id: message.senderId },
+        _id: message._id || Math.random().toString(),
+        text: message.content,
+        createdAt: new Date(message.createdAt),
+        user: { _id: message.sender },
       };
       setMessages(previousMessages => [newMessage, ...previousMessages]);
     };
 
-    // --- NEW: Listen for typing events ---
     const handleTypingStarted = () => setIsTyping(true);
     const handleTypingStopped = () => setIsTyping(false);
 
@@ -102,18 +121,14 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
     setCurrentMessage('');
   };
 
-  // --- NEW: Handle text input changes for typing indicator ---
   const handleInputChange = (text) => {
     setCurrentMessage(text);
-    // If the user is typing, emit a start event
     if (typingTimeout.current === null) {
       socket.emit('typing:start', { recipientId });
     } else {
-      // If they are already typing, clear the old timeout
       clearTimeout(typingTimeout.current);
     }
     
-    // Set a timeout to emit a stop event after 1 second of inactivity
     typingTimeout.current = setTimeout(() => {
       socket.emit('typing:stop', { recipientId });
       typingTimeout.current = null;
@@ -122,6 +137,7 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
 
   const renderItem = ({ item }) => {
     const isMyMessage = item.user._id === currentUserId;
+
     return (
       <View
         style={[
@@ -149,7 +165,6 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
         inverted
         contentContainerStyle={{ paddingVertical: 10 }}
       />
-      {/* --- NEW: Display the typing indicator --- */}
       {isTyping && (
         <View style={styles.typingIndicatorContainer}>
           <Text style={styles.typingIndicatorText}>{username} is typing...</Text>
@@ -159,7 +174,7 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
         <TextInput
           style={styles.input}
           value={currentMessage}
-          onChangeText={handleInputChange} // Use the new handler
+          onChangeText={handleInputChange}
           placeholder="Type a message..."
         />
         <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
@@ -171,67 +186,67 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-  },
-  sendButton: {
-    marginLeft: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: 'blue',
-    borderRadius: 20,
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  messageContainer: {
-    padding: 10,
-    marginVertical: 4,
-    marginHorizontal: 8,
-    borderRadius: 15,
-    maxWidth: '80%',
-  },
-  myMessage: {
-    backgroundColor: '#007AFF',
-    alignSelf: 'flex-end',
-  },
-  theirMessage: {
-    backgroundColor: '#E5E5EA',
-    alignSelf: 'flex-start',
-  },
-  myMessageText: {
-    color: '#fff',
-  },
-  theirMessageText: {
-    color: '#000',
-  },
-  typingIndicatorContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 5,
-  },
-  typingIndicatorText: {
-    color: '#888',
-    fontStyle: 'italic',
-  }
+    container: {
+        flex: 1,
+        backgroundColor: '#f5f5f5',
+      },
+      inputContainer: {
+        flexDirection: 'row',
+        padding: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#ddd',
+        backgroundColor: '#fff',
+      },
+      input: {
+        flex: 1,
+        height: 40,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 20,
+        paddingHorizontal: 15,
+        backgroundColor: '#fff',
+      },
+      sendButton: {
+        marginLeft: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        backgroundColor: 'blue',
+        borderRadius: 20,
+      },
+      sendButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+      },
+      messageContainer: {
+        padding: 10,
+        marginVertical: 4,
+        marginHorizontal: 8,
+        borderRadius: 15,
+        maxWidth: '80%',
+      },
+      myMessage: {
+        backgroundColor: '#007AFF',
+        alignSelf: 'flex-end',
+      },
+      theirMessage: {
+        backgroundColor: '#E5E5EA',
+        alignSelf: 'flex-start',
+      },
+      myMessageText: {
+        color: '#fff',
+      },
+      theirMessageText: {
+        color: '#000',
+      },
+      typingIndicatorContainer: {
+        paddingHorizontal: 15,
+        paddingBottom: 5,
+      },
+      typingIndicatorText: {
+        color: '#888',
+        fontStyle: 'italic',
+      }
 });
 
 export default ChatScreen;
