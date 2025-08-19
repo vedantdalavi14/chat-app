@@ -3,6 +3,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { jwtDecode } from 'jwt-decode'; // Import jwt-decode
+
+// Import the socket instance
+import socket from './socket';
 
 // Import your screen components
 import LoginScreen from './screens/LoginScreen';
@@ -14,15 +18,22 @@ const Stack = createStackNavigator();
 
 export default function App() {
   const [userToken, setUserToken] = useState(null);
+  const [userId, setUserId] = useState(null); // State to hold the user's ID
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkUserToken = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
-        setUserToken(token);
+        if (token) {
+          const decodedToken = jwtDecode(token);
+          setUserId(decodedToken.user.id); // Set the user ID from the token
+          setUserToken(token);
+          socket.connect();
+          socket.emit('user:online', decodedToken.user.id); // Announce that this user is online
+        }
       } catch (e) {
-        console.error('Failed to fetch the token from storage', e);
+        console.error('Failed to process the token from storage', e);
       }
       setIsLoading(false);
     };
@@ -30,16 +41,21 @@ export default function App() {
     checkUserToken();
   }, []);
 
-  // Create an object with auth functions that we can pass to screens
   const authContext = useMemo(
     () => ({
       signIn: async (token) => {
         await AsyncStorage.setItem('userToken', token);
+        const decodedToken = jwtDecode(token);
+        setUserId(decodedToken.user.id);
         setUserToken(token);
+        socket.connect();
+        socket.emit('user:online', decodedToken.user.id);
       },
       signOut: async () => {
         await AsyncStorage.removeItem('userToken');
+        socket.disconnect();
         setUserToken(null);
+        setUserId(null);
       },
     }),
     []
@@ -62,7 +78,10 @@ export default function App() {
             <Stack.Screen name="Home">
               {(props) => <HomeScreen {...props} authContext={authContext} />}
             </Stack.Screen>
-            <Stack.Screen name="Chat" component={ChatScreen} />
+            {/* Pass the userId to the ChatScreen */}
+            <Stack.Screen name="Chat">
+              {(props) => <ChatScreen {...props} currentUserId={userId} />}
+            </Stack.Screen>
           </>
         ) : (
           // Screens accessible before login
