@@ -48,11 +48,14 @@ io.on('connection', (socket) => {
   socket.on('user:online', (userId) => {
     console.log(`User ${userId} is online with socket ${socket.id}`);
     onlineUsers.set(userId, socket.id);
+    // --- NEW: Broadcast to other users that this user is now online ---
+    socket.broadcast.emit('user:connected', userId);
+    // --- NEW: Send the list of currently online users to the new client ---
+    socket.emit('users:online', Array.from(onlineUsers.keys()));
   });
 
   socket.on('message:send', async (data) => {
     const { senderId, recipientId, text } = data;
-    console.log(`Message from ${senderId} to ${recipientId}: ${text}`);
     
     try {
       const newMessage = new Message({
@@ -75,7 +78,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- NEW: Handle Typing Events ---
   socket.on('typing:start', (data) => {
     const { recipientId } = data;
     const recipientSocketId = onlineUsers.get(recipientId);
@@ -91,13 +93,14 @@ io.on('connection', (socket) => {
       io.to(recipientSocketId).emit('typing:stopped');
     }
   });
-  // --------------------------------
 
   socket.on('disconnect', () => {
     console.log('user disconnected:', socket.id);
     for (let [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
         onlineUsers.delete(userId);
+        // --- NEW: Broadcast to other users that this user went offline ---
+        socket.broadcast.emit('user:disconnected', userId);
         console.log(`User ${userId} went offline.`);
         break;
       }
