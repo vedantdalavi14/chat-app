@@ -6,16 +6,16 @@ import {
   Button,
   StyleSheet,
   TouchableOpacity,
-  Alert, // Import Alert for showing messages
+  Alert,
 } from 'react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// We no longer need AsyncStorage here, as it's handled in App.js
+// import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// IMPORTANT: Replace this with your computer's local IP address
-// You cannot use 'localhost' from your mobile device
-const API_URL = 'http://192.168.1.8:5000'; // This has been updated to your IP address
+const API_URL = 'http://192.168.1.8:5000';
 
-const LoginScreen = ({ navigation }) => {
+// Accept the authContext prop
+const LoginScreen = ({ navigation, authContext }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -33,13 +33,8 @@ const LoginScreen = ({ navigation }) => {
 
       const { token } = response.data;
 
-      // Store the token securely
-      await AsyncStorage.setItem('userToken', token);
-
-      Alert.alert('Success', 'Logged in successfully!');
-
-      // We will add navigation to the Home screen later
-      // For now, a success message is enough to confirm it works.
+      // Call the signIn function from App.js to update the state
+      authContext.signIn(token);
 
     } catch (error) {
       console.error('Login Error:', error.response?.data || error.message);
@@ -64,7 +59,7 @@ const LoginScreen = ({ navigation }) => {
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry // Hides the password
+        secureTextEntry
       />
 
       <Button title="Login" onPress={handleLogin} />

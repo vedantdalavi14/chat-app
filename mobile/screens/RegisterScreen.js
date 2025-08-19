@@ -9,12 +9,12 @@ import {
   Alert,
 } from 'react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// We no longer need AsyncStorage here, as it's handled in App.js
 
-// We can reuse the same API_URL from the Login screen
 const API_URL = 'http://192.168.1.8:5000'; 
 
-const RegisterScreen = ({ navigation }) => {
+// Accept the authContext prop
+const RegisterScreen = ({ navigation, authContext }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -32,12 +32,8 @@ const RegisterScreen = ({ navigation }) => {
 
       const { token } = response.data;
 
-      // Store the token so the user is logged in immediately
-      await AsyncStorage.setItem('userToken', token);
-
-      Alert.alert('Success', 'Account created successfully!');
-      
-      // We will add navigation to the Home screen later
+      // Call the signIn function from App.js to update the state
+      authContext.signIn(token);
 
     } catch (error) {
       const errorMsg = error.response?.data?.msg || 'Registration failed. Please try again.';
