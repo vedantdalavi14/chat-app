@@ -48,9 +48,7 @@ io.on('connection', (socket) => {
   socket.on('user:online', (userId) => {
     console.log(`User ${userId} is online with socket ${socket.id}`);
     onlineUsers.set(userId, socket.id);
-    // --- NEW: Broadcast to other users that this user is now online ---
     socket.broadcast.emit('user:connected', userId);
-    // --- NEW: Send the list of currently online users to the new client ---
     socket.emit('users:online', Array.from(onlineUsers.keys()));
   });
 
@@ -63,18 +61,16 @@ io.on('connection', (socket) => {
         receiver: recipientId,
         content: text,
       });
-      await newMessage.save();
+      const savedMessage = await newMessage.save(); // Get the full saved message
+      
+      const recipientSocketId = onlineUsers.get(recipientId);
+
+      if (recipientSocketId) {
+        // --- CHANGE: Emit the entire saved message object ---
+        io.to(recipientSocketId).emit('message:new', savedMessage);
+      }
     } catch (error) {
       console.error('Error saving message to DB:', error);
-    }
-    
-    const recipientSocketId = onlineUsers.get(recipientId);
-
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('message:new', {
-        senderId,
-        text,
-      });
     }
   });
 
@@ -99,7 +95,6 @@ io.on('connection', (socket) => {
     for (let [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
         onlineUsers.delete(userId);
-        // --- NEW: Broadcast to other users that this user went offline ---
         socket.broadcast.emit('user:disconnected', userId);
         console.log(`User ${userId} went offline.`);
         break;
