@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const User = require('./models/User'); // Import User model for status updates
 const Message = require('./models/Message'); // Import Message model to save chats
+const conversationRoutes = require('./routes/conversations');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +34,7 @@ mongoose.connect(process.env.MONGO_URI)
 // API Routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
+app.use('/conversations', conversationRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');

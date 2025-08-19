@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { jwtDecode } from 'jwt-decode'; // Import jwt-decode
+import { jwtDecode } from 'jwt-decode';
 
 // Import the socket instance
 import socket from './socket';
@@ -18,19 +18,35 @@ const Stack = createStackNavigator();
 
 export default function App() {
   const [userToken, setUserToken] = useState(null);
-  const [userId, setUserId] = useState(null); // State to hold the user's ID
+  const [userId, setUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // This listener will fire every time the socket successfully connects
+    const onConnect = () => {
+      console.log('Socket connected! Announcing user is online...');
+      // To ensure we have the correct user ID, we read it from storage again
+      AsyncStorage.getItem('userToken').then(token => {
+        if (token) {
+          const decoded = jwtDecode(token);
+          socket.emit('user:online', decoded.user.id);
+        }
+      });
+    };
+
+    // We listen for the 'connect' event
+    socket.on('connect', onConnect);
+
+    // Initial check when the app loads
     const checkUserToken = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
         if (token) {
           const decodedToken = jwtDecode(token);
-          setUserId(decodedToken.user.id); // Set the user ID from the token
+          setUserId(decodedToken.user.id);
           setUserToken(token);
+          // We just connect here. The 'onConnect' listener will handle the emit.
           socket.connect();
-          socket.emit('user:online', decodedToken.user.id); // Announce that this user is online
         }
       } catch (e) {
         console.error('Failed to process the token from storage', e);
@@ -39,6 +55,11 @@ export default function App() {
     };
 
     checkUserToken();
+
+    // Clean up the listener when the component unmounts
+    return () => {
+      socket.off('connect', onConnect);
+    };
   }, []);
 
   const authContext = useMemo(
@@ -48,8 +69,8 @@ export default function App() {
         const decodedToken = jwtDecode(token);
         setUserId(decodedToken.user.id);
         setUserToken(token);
+        // We just connect here. The 'onConnect' listener will handle the emit.
         socket.connect();
-        socket.emit('user:online', decodedToken.user.id);
       },
       signOut: async () => {
         await AsyncStorage.removeItem('userToken');
@@ -73,18 +94,15 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator>
         {userToken ? (
-          // Screens accessible after login
           <>
             <Stack.Screen name="Home">
               {(props) => <HomeScreen {...props} authContext={authContext} />}
             </Stack.Screen>
-            {/* Pass the userId to the ChatScreen */}
             <Stack.Screen name="Chat">
               {(props) => <ChatScreen {...props} currentUserId={userId} />}
             </Stack.Screen>
           </>
         ) : (
-          // Screens accessible before login
           <>
             <Stack.Screen name="Login" options={{ headerShown: false }}>
               {(props) => <LoginScreen {...props} authContext={authContext} />}

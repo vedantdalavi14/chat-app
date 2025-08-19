@@ -8,36 +8,66 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import socket from '../socket'; // Import the socket instance
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_URL = 'http://192.168.1.8:5000';
 
 const ChatScreen = ({ route, navigation, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
-  // The recipient's ID and username are passed from the HomeScreen
   const { userId: recipientId, username } = route.params;
 
-  // Set the header title to the username
   useEffect(() => {
     navigation.setOptions({ title: username });
   }, [username, navigation]);
 
-  // Listen for incoming messages
+  // --- NEW: Fetch message history when the component mounts ---
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const response = await axios.get(`${API_URL}/conversations/${recipientId}`, {
+          headers: {
+            authorization: `Bearer ${token}`,
+          },
+        });
+        
+        // Format the messages from the API to match the state structure
+        const formattedMessages = response.data.map(msg => ({
+          _id: msg._id,
+          text: msg.content,
+          createdAt: new Date(msg.createdAt),
+          user: { _id: msg.sender },
+        }));
+
+        setMessages(formattedMessages.reverse()); // Reverse to show newest at the bottom
+      } catch (error) {
+        console.error('Failed to fetch messages:', error);
+        Alert.alert('Error', 'Could not load chat history.');
+      }
+    };
+
+    fetchMessages();
+  }, [recipientId]);
+  // ---------------------------------------------------------
+
   useEffect(() => {
     const handleNewMessage = (message) => {
-      // Create a message object that matches our state structure
       const newMessage = {
-        _id: Math.random().toString(), // Use a random ID for the key
+        _id: Math.random().toString(),
         text: message.text,
         createdAt: new Date(),
-        user: { _id: message.senderId }, // The ID of the person who sent the message
+        user: { _id: message.senderId },
       };
       setMessages(previousMessages => [newMessage, ...previousMessages]);
     };
 
     socket.on('message:new', handleNewMessage);
 
-    // Clean up the listener when the component unmounts
     return () => {
       socket.off('message:new', handleNewMessage);
     };
@@ -52,22 +82,19 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
       text: currentMessage,
     };
 
-    // Emit the message to the server
     socket.emit('message:send', messageData);
 
-    // Add the message to our own screen immediately
     const newMessage = {
       _id: Math.random().toString(),
       text: currentMessage,
       createdAt: new Date(),
-      user: { _id: currentUserId }, // This is our own message
+      user: { _id: currentUserId },
     };
     setMessages(previousMessages => [newMessage, ...previousMessages]);
     setCurrentMessage('');
   };
 
   const renderItem = ({ item }) => {
-    // Check if the message is from the current user
     const isMyMessage = item.user._id === currentUserId;
 
     return (
@@ -94,7 +121,7 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
         data={messages}
         renderItem={renderItem}
         keyExtractor={(item) => item._id.toString()}
-        inverted // This makes the chat start from the bottom
+        inverted
         contentContainerStyle={{ paddingVertical: 10 }}
       />
       <View style={styles.inputContainer}>
