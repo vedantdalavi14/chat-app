@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import socket from '../socket'; // Import the socket instance
+import socket from '../socket';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -19,13 +19,15 @@ const API_URL = 'http://192.168.1.8:5000';
 const ChatScreen = ({ route, navigation, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [currentMessage, setCurrentMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false); // State to track if the other user is typing
   const { userId: recipientId, username } = route.params;
+
+  const typingTimeout = useRef(null);
 
   useEffect(() => {
     navigation.setOptions({ title: username });
   }, [username, navigation]);
 
-  // --- NEW: Fetch message history when the component mounts ---
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -36,7 +38,6 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
           },
         });
         
-        // Format the messages from the API to match the state structure
         const formattedMessages = response.data.map(msg => ({
           _id: msg._id,
           text: msg.content,
@@ -44,7 +45,7 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
           user: { _id: msg.sender },
         }));
 
-        setMessages(formattedMessages.reverse()); // Reverse to show newest at the bottom
+        setMessages(formattedMessages.reverse());
       } catch (error) {
         console.error('Failed to fetch messages:', error);
         Alert.alert('Error', 'Could not load chat history.');
@@ -53,7 +54,6 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
 
     fetchMessages();
   }, [recipientId]);
-  // ---------------------------------------------------------
 
   useEffect(() => {
     const handleNewMessage = (message) => {
@@ -66,10 +66,18 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
       setMessages(previousMessages => [newMessage, ...previousMessages]);
     };
 
+    // --- NEW: Listen for typing events ---
+    const handleTypingStarted = () => setIsTyping(true);
+    const handleTypingStopped = () => setIsTyping(false);
+
     socket.on('message:new', handleNewMessage);
+    socket.on('typing:started', handleTypingStarted);
+    socket.on('typing:stopped', handleTypingStopped);
 
     return () => {
       socket.off('message:new', handleNewMessage);
+      socket.off('typing:started', handleTypingStarted);
+      socket.off('typing:stopped', handleTypingStopped);
     };
   }, []);
 
@@ -94,9 +102,26 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
     setCurrentMessage('');
   };
 
+  // --- NEW: Handle text input changes for typing indicator ---
+  const handleInputChange = (text) => {
+    setCurrentMessage(text);
+    // If the user is typing, emit a start event
+    if (typingTimeout.current === null) {
+      socket.emit('typing:start', { recipientId });
+    } else {
+      // If they are already typing, clear the old timeout
+      clearTimeout(typingTimeout.current);
+    }
+    
+    // Set a timeout to emit a stop event after 1 second of inactivity
+    typingTimeout.current = setTimeout(() => {
+      socket.emit('typing:stop', { recipientId });
+      typingTimeout.current = null;
+    }, 1000);
+  };
+
   const renderItem = ({ item }) => {
     const isMyMessage = item.user._id === currentUserId;
-
     return (
       <View
         style={[
@@ -124,11 +149,17 @@ const ChatScreen = ({ route, navigation, currentUserId }) => {
         inverted
         contentContainerStyle={{ paddingVertical: 10 }}
       />
+      {/* --- NEW: Display the typing indicator --- */}
+      {isTyping && (
+        <View style={styles.typingIndicatorContainer}>
+          <Text style={styles.typingIndicatorText}>{username} is typing...</Text>
+        </View>
+      )}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
           value={currentMessage}
-          onChangeText={setCurrentMessage}
+          onChangeText={handleInputChange} // Use the new handler
           placeholder="Type a message..."
         />
         <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
@@ -193,6 +224,14 @@ const styles = StyleSheet.create({
   theirMessageText: {
     color: '#000',
   },
+  typingIndicatorContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 5,
+  },
+  typingIndicatorText: {
+    color: '#888',
+    fontStyle: 'italic',
+  }
 });
 
 export default ChatScreen;

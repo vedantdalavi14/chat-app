@@ -7,9 +7,8 @@ const { Server } = require("socket.io");
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
-const User = require('./models/User'); // Import User model for status updates
-const Message = require('./models/Message'); // Import Message model to save chats
 const conversationRoutes = require('./routes/conversations');
+const Message = require('./models/Message');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,23 +40,20 @@ app.get('/', (req, res) => {
 });
 
 // --- Socket.IO Logic ---
-const onlineUsers = new Map(); // To map userId to socketId
+const onlineUsers = new Map();
 
 io.on('connection', (socket) => {
   console.log('a user connected:', socket.id);
 
-  // When a user comes online, they send their userId
   socket.on('user:online', (userId) => {
     console.log(`User ${userId} is online with socket ${socket.id}`);
     onlineUsers.set(userId, socket.id);
   });
 
-  // When a user sends a message
   socket.on('message:send', async (data) => {
     const { senderId, recipientId, text } = data;
     console.log(`Message from ${senderId} to ${recipientId}: ${text}`);
     
-    // Save the message to the database
     try {
       const newMessage = new Message({
         sender: senderId,
@@ -69,14 +65,9 @@ io.on('connection', (socket) => {
       console.error('Error saving message to DB:', error);
     }
     
-    // --- NEW DEBUG LOGS ---
-    console.log('Current online users:', onlineUsers);
     const recipientSocketId = onlineUsers.get(recipientId);
-    console.log(`Trying to find socket for recipient ${recipientId}. Found: ${recipientSocketId}`);
-    // --------------------
 
     if (recipientSocketId) {
-      // If the recipient is online, send the message directly to them
       io.to(recipientSocketId).emit('message:new', {
         senderId,
         text,
@@ -84,10 +75,26 @@ io.on('connection', (socket) => {
     }
   });
 
-  // When a user disconnects
+  // --- NEW: Handle Typing Events ---
+  socket.on('typing:start', (data) => {
+    const { recipientId } = data;
+    const recipientSocketId = onlineUsers.get(recipientId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('typing:started');
+    }
+  });
+
+  socket.on('typing:stop', (data) => {
+    const { recipientId } = data;
+    const recipientSocketId = onlineUsers.get(recipientId);
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('typing:stopped');
+    }
+  });
+  // --------------------------------
+
   socket.on('disconnect', () => {
     console.log('user disconnected:', socket.id);
-    // Remove the user from the online list
     for (let [userId, socketId] of onlineUsers.entries()) {
       if (socketId === socket.id) {
         onlineUsers.delete(userId);
