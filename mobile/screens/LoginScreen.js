@@ -12,7 +12,7 @@ import axios from 'axios';
 // We no longer need AsyncStorage here, as it's handled in App.js
 // import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.1.3:5000';
+const API_URL = 'http://192.168.1.2:5000';
 
 // Accept the authContext prop
 const LoginScreen = ({ navigation, authContext }) => {

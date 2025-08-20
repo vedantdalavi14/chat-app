@@ -2,21 +2,16 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const sharp = require('sharp');
+const fs = require('fs');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const bcrypt = require('bcryptjs');
 
 // --- Multer Configuration ---
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'public/uploads/');
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Store in memory to process with sharp before saving
+const storage = multer.memoryStorage();
 
 const upload = multer({ storage: storage });
 
@@ -67,7 +62,16 @@ router.put('/avatar', [auth, upload.single('avatar')], async (req, res) => {
       return res.status(400).json({ msg: 'No file uploaded.' });
     }
 
-    const avatarUrl = `http://192.168.1.8:5000/public/uploads/${req.file.filename}`;
+    const filename = `avatar-${req.user.id}-${Date.now()}.jpeg`;
+    const filepath = path.join('public/uploads', filename);
+
+    // Process image with sharp
+    await sharp(req.file.buffer)
+      .resize(200, 200) // Resize to 200x200 pixels
+      .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
+      .toFile(filepath);
+
+    const avatarUrl = `http://192.168.1.2:5000/public/uploads/${filename}`;
 
     const user = await User.findByIdAndUpdate(
       req.user.id,

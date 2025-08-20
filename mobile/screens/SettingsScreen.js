@@ -5,7 +5,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 
-const API_URL = 'http://192.168.1.3:5000';
+const API_URL = 'http://192.168.1.2:5000';
 
 const SettingsScreen = ({ authContext }) => {
   const [userData, setUserData] = useState(null);
@@ -47,7 +47,7 @@ const SettingsScreen = ({ authContext }) => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.5,
     });
 
     if (!result.canceled) {
