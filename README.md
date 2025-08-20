@@ -7,6 +7,10 @@ This is a full-stack, real-time 1:1 chat application built to replicate the core
 The application provides a complete user experience, from authentication and profile customization to live, persistent conversations with other users.
 
 ## Live Video Demo
+  
+
+https://github.com/user-attachments/assets/da457c19-326f-4ceb-b1fd-18f150328418
+
 
 [(https://youtu.be/LJjvXaUAH5U)]
 
