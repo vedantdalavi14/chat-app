@@ -8,8 +8,8 @@ const { Server } = require("socket.io");
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const conversationRoutes = require('./routes/conversations');
-const Message = require('./models/Message');
 const profileRoutes = require('./routes/profile');
+const Message = require('./models/Message');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,11 +48,40 @@ const onlineUsers = new Map();
 io.on('connection', (socket) => {
   console.log('a user connected:', socket.id);
 
-  socket.on('user:online', (userId) => {
+  socket.on('user:online', async (userId) => {
     console.log(`User ${userId} is online with socket ${socket.id}`);
     onlineUsers.set(userId, socket.id);
+
+    // --- CHANGE: Notify other users that this user is now online ---
     socket.broadcast.emit('user:connected', userId);
     socket.emit('users:online', Array.from(onlineUsers.keys()));
+
+    // --- NEW: Update messages to 'delivered' and notify senders ---
+    try {
+        // Find all messages sent to this user that are still in 'sent' status
+        const pendingMessages = await Message.find({
+            receiver: userId,
+            status: 'sent',
+        });
+
+        if (pendingMessages.length > 0) {
+            // Update all found messages to 'delivered'
+            await Message.updateMany(
+                { receiver: userId, status: 'sent' },
+                { $set: { status: 'delivered' } }
+            );
+
+            // Notify each sender that their messages have been delivered
+            pendingMessages.forEach(msg => {
+                const senderSocketId = onlineUsers.get(msg.sender.toString());
+                if (senderSocketId) {
+                    io.to(senderSocketId).emit('messages:delivered', { to: userId });
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error updating messages to delivered:', error);
+    }
   });
 
   socket.on('message:send', async (data) => {
@@ -63,17 +92,43 @@ io.on('connection', (socket) => {
         sender: senderId,
         receiver: recipientId,
         content: text,
+        // --- CHANGE: Set status based on whether the recipient is online ---
+        status: onlineUsers.has(recipientId) ? 'delivered' : 'sent',
       });
-      const savedMessage = await newMessage.save(); // Get the full saved message
+      const savedMessage = await newMessage.save();
       
       const recipientSocketId = onlineUsers.get(recipientId);
 
       if (recipientSocketId) {
-        // --- CHANGE: Emit the entire saved message object ---
+        // Send the new message to the recipient
         io.to(recipientSocketId).emit('message:new', savedMessage);
       }
+      
+      // Also send the message back to the sender so they can see its status
+      socket.emit('message:sent', savedMessage);
+
     } catch (error) {
       console.error('Error saving message to DB:', error);
+    }
+  });
+
+  // --- NEW: Handle Read Receipts ---
+  socket.on('chat:read', async (data) => {
+    const { readerId, senderId } = data;
+    try {
+        // Update all messages from the sender to the reader to 'read'
+        await Message.updateMany(
+            { sender: senderId, receiver: readerId, status: { $ne: 'read' } },
+            { $set: { status: 'read' } }
+        );
+
+        // Notify the original sender that their messages have been read
+        const senderSocketId = onlineUsers.get(senderId);
+        if (senderSocketId) {
+            io.to(senderSocketId).emit('messages:read', { conversationPartnerId: readerId });
+        }
+    } catch (error) {
+        console.error('Error updating messages to read:', error);
     }
   });
 

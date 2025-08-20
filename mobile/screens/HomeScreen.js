@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import socket from '../socket';
 import { useFocusEffect } from '@react-navigation/native';
 
-const API_URL = 'http://192.168.1.8:5000';
+const API_URL = 'http://192.168.1.3:5000';
 
 const formatTimestamp = (date) => {
   if (!date) return '';

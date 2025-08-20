@@ -6,7 +6,7 @@ const MessageSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
-    receiver: { // Changed from 'receiver' to 'receiver' for consistency
+    receiver: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
@@ -15,12 +15,13 @@ const MessageSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    // --- NEW FIELD ---
     status: {
         type: String,
-        enum: ['sent', 'delivered', 'read'],
-        default: 'sent',
+        // enum ensures the status can only be one of these values
+        enum: ['sent', 'delivered', 'read'], 
+        default: 'sent', // A message is 'sent' by default
     }
-}, { timestamps: true }); // Automatically adds createdAt and updatedAt
+}, { timestamps: true });
 
-// This is the crucial line that exports the model correctly
 module.exports = mongoose.model('Message', MessageSchema);
