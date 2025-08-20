@@ -4,6 +4,8 @@ const multer = require('multer');
 const path = require('path');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
+const Message = require('../models/Message');
+const bcrypt = require('bcryptjs');
 
 // --- Multer Configuration ---
 const storage = multer.diskStorage({
@@ -74,6 +76,39 @@ router.put('/avatar', [auth, upload.single('avatar')], async (req, res) => {
     ).select('-password');
 
     res.json(user);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   DELETE /profile
+// @desc    Delete user account and all associated data
+// @access  Private
+router.delete('/', auth, async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    // 1. Find the user
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    // 2. Check if the provided password is correct
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    }
+
+    // 3. Delete all messages sent or received by the user
+    await Message.deleteMany({ $or: [{ sender: req.user.id }, { receiver: req.user.id }] });
+
+    // 4. Delete the user account
+    await User.findByIdAndDelete(req.user.id);
+
+    res.json({ msg: 'Your account has been permanently deleted.' });
+
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
