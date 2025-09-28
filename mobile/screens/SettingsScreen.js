@@ -1,17 +1,21 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Button, Image, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import colors from '../theme/colors';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 
-const API_URL = 'http://192.168.1.2:5000';
+const API_URL = 'http://192.168.1.4:5000';
 
 const SettingsScreen = ({ authContext }) => {
   const [userData, setUserData] = useState(null);
   const [displayName, setDisplayName] = useState('');
   const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const fetchUserData = useCallback(async () => {
     try {
@@ -78,7 +82,11 @@ const SettingsScreen = ({ authContext }) => {
 
     } catch (error) {
       console.error('Image upload error:', error.response?.data || error.message);
-      Alert.alert('Error', 'Failed to upload image.');
+      if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
+        Alert.alert('Network Error', 'Please check your internet connection and make sure the server is running.');
+      } else {
+        Alert.alert('Error', `Failed to upload image: ${error.response?.data?.msg || error.message}`);
+      }
     }
   };
 
@@ -163,7 +171,10 @@ const SettingsScreen = ({ authContext }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Settings</Text>
+      </View>
       {/* --- Password Confirmation Modal --- */}
       <Modal
         transparent={true}
@@ -175,13 +186,26 @@ const SettingsScreen = ({ authContext }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Confirm Deletion</Text>
             <Text style={styles.modalText}>Please enter your password to permanently delete your account.</Text>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInputField}
+                placeholder="Password"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-off' : 'eye'}
+                  size={20}
+                  color="#555"
+                />
+              </TouchableOpacity>
+            </View>
             <View style={styles.modalButtons}>
               <Button title="Cancel" onPress={() => { setDeleteModalVisible(false); setPassword(''); }} />
               <Button title="Confirm" color="#FF3B30" onPress={confirmDeleteAccount} />
@@ -190,7 +214,8 @@ const SettingsScreen = ({ authContext }) => {
         </View>
       </Modal>
 
-      <TouchableOpacity onPress={handleChoosePhoto}>
+      <View style={styles.content}>
+        <TouchableOpacity onPress={handleChoosePhoto}>
         {userData?.avatarUrl ? (
           <Image source={{ uri: userData.avatarUrl }} style={styles.avatar} />
         ) : (
@@ -198,7 +223,7 @@ const SettingsScreen = ({ authContext }) => {
             <Text style={styles.avatarPlaceholderText}>Add Photo</Text>
           </View>
         )}
-      </TouchableOpacity>
+        </TouchableOpacity>
       
       {/* --- NEW: Display Name Input --- */}
       <View style={styles.nameContainer}>
@@ -218,16 +243,38 @@ const SettingsScreen = ({ authContext }) => {
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteButtonText}>Delete Account</Text>
       </TouchableOpacity>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 8,
     backgroundColor: '#fff',
+  },
+  header: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+    width: '100%',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 24,
   },
   avatar: {
     width: 120,
@@ -316,6 +363,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
+  },
+  passwordContainer: {
+    width: '100%',
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  passwordInputField: {
+    flex: 1,
+    height: '100%',
+  },
+  eyeButton: {
+    padding: 5,
+  },
+  eyeIcon: {
+    fontSize: 20,
   }
 });
 

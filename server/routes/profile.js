@@ -71,7 +71,7 @@ router.put('/avatar', [auth, upload.single('avatar')], async (req, res) => {
       .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
       .toFile(filepath);
 
-    const avatarUrl = `http://192.168.1.2:5000/public/uploads/${filename}`;
+    const avatarUrl = `http://192.168.1.4:5000/public/uploads/${filename}`;
 
     const user = await User.findByIdAndUpdate(
       req.user.id,

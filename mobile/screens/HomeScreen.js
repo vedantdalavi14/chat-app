@@ -8,16 +8,17 @@ import {
   Alert,
   Image,
   RefreshControl,
-  SafeAreaView,
   Platform, // Import Platform
   StatusBar, // Import StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import colors from '../theme/colors';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socket from '../socket';
 import { useFocusEffect } from '@react-navigation/native';
 
-const API_URL = 'http://192.168.1.2:5000';
+const API_URL = 'http://192.168.1.4:5000';
 
 const formatTimestamp = (date) => {
   if (!date) return '';
@@ -157,7 +158,7 @@ const HomeScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Chats</Text>
+        <Text style={styles.headerTitle}>Global Chat</Text>
       </View>
       <FlatList
         data={users}
@@ -176,18 +177,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    // --- FIX: Add padding for Android status bar ---
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    // Small consistent top padding
+    paddingTop: 8,
   },
   header: {
     paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: '#fff',
   },
   userItem: {
     flexDirection: 'row',

@@ -10,8 +10,11 @@ import socket from './socket';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
+import FriendsScreen from './screens/FriendsScreen';
 import ChatScreen from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen'; // Import the new screen
+import { Ionicons } from '@expo/vector-icons';
+import colors from './theme/colors';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator(); // Create a tab navigator instance
@@ -19,15 +22,46 @@ const Tab = createBottomTabNavigator(); // Create a tab navigator instance
 // This component will be the main UI after logging in, containing the tabs
 function AppTabs({ authContext }) {
   return (
-    <Tab.Navigator>
-      <Tab.Screen 
-        name="Chats" 
-        // We use a function here to pass the authContext down to HomeScreen
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabInactive,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOpacity: 0.15,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: -2 },
+          height: 60,
+          paddingBottom: 6,
+        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarIcon: ({ color, size, focused }) => {
+          let iconName;
+          if (route.name === 'Global Chat') {
+            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+          } else if (route.name === 'Friends') {
+            iconName = focused ? 'people' : 'people-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
+          }
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen
+        name="Global Chat"
         children={(props) => <HomeScreen {...props} authContext={authContext} />}
-        options={{ headerShown: false }} // Hide header as HomeScreen has its own
       />
-      <Tab.Screen 
-        name="Settings" 
+      <Tab.Screen
+        name="Friends"
+        component={FriendsScreen}
+      />
+      <Tab.Screen
+        name="Settings"
         children={(props) => <SettingsScreen {...props} authContext={authContext} />}
       />
     </Tab.Navigator>
