@@ -8,8 +8,6 @@ import {
   Alert,
   Image,
   RefreshControl,
-  Platform, // Import Platform
-  StatusBar, // Import StatusBar
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
@@ -42,28 +40,63 @@ const HomeScreen = ({ navigation }) => {
   const [users, setUsers] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [sending, setSending] = useState({}); // track add friend actions
+  const [accepting, setAccepting] = useState({}); // track accept actions
 
   const fetchUsers = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (token) {
-        const response = await axios.get(`${API_URL}/users`, {
-          headers: {
-            authorization: `Bearer ${token}`,
-          },
+        const response = await axios.get(`${API_URL}/users/all`, { headers: { authorization: `Bearer ${token}` } });
+        // Sort: friends with recent chats first, then others
+        const sorted = response.data.sort((a, b) => {
+          const aTime = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+          const bTime = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+          return bTime - aTime;
         });
-        const sortedUsers = response.data.sort((a, b) => {
-            const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
-            const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
-            return timeB - timeA;
-        });
-        setUsers(sortedUsers);
+        setUsers(sorted);
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
       Alert.alert('Error', 'Could not fetch users.');
     }
   }, []);
+
+  const sendFriendRequest = async (userId) => {
+    if (sending[userId]) return;
+    try {
+      setSending(p => ({ ...p, [userId]: true }));
+      const token = await AsyncStorage.getItem('userToken');
+      await axios.post(`${API_URL}/friends/request/${userId}`, {}, { headers: { authorization: `Bearer ${token}` } });
+      setUsers(prev => prev.map(u => u._id === userId ? { ...u, pendingOutgoing: true } : u));
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.msg || 'Failed to send request');
+    } finally {
+      setSending(p => ({ ...p, [userId]: false }));
+    }
+  };
+
+  const acceptFriendRequest = async (userId) => {
+    // Need to find the friend request id: we only stored incoming flag
+    if (accepting[userId]) return;
+    try {
+      setAccepting(p => ({ ...p, [userId]: true }));
+      const token = await AsyncStorage.getItem('userToken');
+      // Fetch pending requests to find matching sender id
+      const reqRes = await axios.get(`${API_URL}/friends/requests`, { headers: { authorization: `Bearer ${token}` } });
+      const match = reqRes.data.find(r => r.sender?._id === userId);
+      if (!match) {
+        Alert.alert('Not found', 'Pending request not located. Pull to refresh.');
+      } else {
+        await axios.post(`${API_URL}/friends/accept/${match._id}`, {}, { headers: { authorization: `Bearer ${token}` } });
+        setUsers(prev => prev.map(u => u._id === userId ? { ...u, isFriend: true, pendingIncoming: false } : u));
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.msg || 'Failed to accept request');
+    } finally {
+      setAccepting(p => ({ ...p, [userId]: false }));
+    }
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -120,38 +153,54 @@ const HomeScreen = ({ navigation }) => {
   const renderUser = ({ item }) => {
     const isOnline = onlineUsers.has(item._id);
     const nameToDisplay = item.displayName || item.username;
+    const showChat = item.isFriend;
+
+    let actionButton = null;
+    if (!item.isFriend) {
+      if (item.pendingOutgoing) {
+        actionButton = <View style={[styles.badge, styles.pendingBadge]}><Text style={styles.badgeText}>Pending</Text></View>;
+      } else if (item.pendingIncoming) {
+        actionButton = (
+          <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} disabled={accepting[item._id]} onPress={() => acceptFriendRequest(item._id)}>
+            <Text style={styles.actionText}>{accepting[item._id] ? '...' : 'Accept'}</Text>
+          </TouchableOpacity>
+        );
+      } else {
+        actionButton = (
+          <TouchableOpacity style={styles.actionBtn} disabled={sending[item._id]} onPress={() => sendFriendRequest(item._id)}>
+            <Text style={styles.actionText}>{sending[item._id] ? '...' : 'Add'}</Text>
+          </TouchableOpacity>
+        );
+      }
+    }
 
     return (
-      <TouchableOpacity
-        style={styles.userItem}
-        onPress={() => navigation.navigate('Chat', { 
-            userId: item._id, 
-            username: nameToDisplay,
-            avatarUrl: item.avatarUrl // Pass the avatar URL
-        })}
-      >
-        <View style={styles.avatarContainer}>
-          {item.avatarUrl ? (
-            <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatar} />
-          )}
-          {isOnline && <View style={styles.onlineDot} />}
-        </View>
-        <View style={styles.userInfo}>
-          <View style={styles.userInfoTop}>
-            <Text style={styles.username}>{nameToDisplay}</Text>
-            {item.lastMessage && (
-                <Text style={styles.timestamp}>
-                    {formatTimestamp(item.lastMessage.createdAt)}
-                </Text>
+      <View style={styles.userItem}>
+        <TouchableOpacity style={styles.userTap} disabled={!showChat} onPress={() => showChat && navigation.navigate('Chat', { userId: item._id, username: nameToDisplay, avatarUrl: item.avatarUrl })}>
+          <View style={styles.avatarContainer}>
+            {item.avatarUrl ? (
+              <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatar} />
             )}
+            {isOnline && <View style={styles.onlineDot} />}
           </View>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage ? item.lastMessage.content : 'No messages yet'}
-          </Text>
-        </View>
-      </TouchableOpacity>
+          <View style={styles.userInfo}>
+            <View style={styles.userInfoTop}>
+              <Text style={styles.username}>{nameToDisplay}</Text>
+              {item.lastMessage && (
+                <Text style={styles.timestamp}>{formatTimestamp(item.lastMessage.createdAt)}</Text>
+              )}
+            </View>
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {item.isFriend
+                ? (item.lastMessage ? item.lastMessage.content : 'No messages yet')
+                : item.pendingIncoming ? 'Wants to connect' : item.pendingOutgoing ? 'Request sent' : 'Not friends yet'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        {actionButton}
+      </View>
     );
   };
 
@@ -164,10 +213,8 @@ const HomeScreen = ({ navigation }) => {
         data={users}
         renderItem={renderUser}
         keyExtractor={(item) => item._id}
-        ListEmptyComponent={<Text style={styles.emptyText}>No other users found.</Text>}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        ListEmptyComponent={<Text style={styles.emptyText}>No users found.</Text>}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       />
     </SafeAreaView>
   );
@@ -203,6 +250,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  userTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   avatarContainer: {
     position: 'relative',
@@ -253,7 +305,37 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     color: '#888',
-  }
+  },
+  actionBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginLeft: 10,
+  },
+  acceptBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  actionText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#999',
+    marginLeft: 10,
+  },
+  pendingBadge: {
+    backgroundColor: '#999',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });
 
 export default HomeScreen;
