@@ -11,6 +11,8 @@ import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
 import FriendsScreen from './screens/FriendsScreen';
+import FindPeopleScreen from './screens/FindPeopleScreen';
+import FriendRequestsScreen from './screens/FriendRequestsScreen';
 import ChatScreen from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen'; // Import the new screen
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +47,10 @@ function AppTabs({ authContext }) {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Friends') {
             iconName = focused ? 'people' : 'people-outline';
+          } else if (route.name === 'Find') {
+            iconName = focused ? 'person-add' : 'person-add-outline';
+          } else if (route.name === 'Requests') {
+            iconName = focused ? 'mail-unread' : 'mail-unread-outline';
           } else if (route.name === 'Settings') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -59,6 +65,14 @@ function AppTabs({ authContext }) {
       <Tab.Screen
         name="Friends"
         component={FriendsScreen}
+      />
+      <Tab.Screen
+        name="Find"
+        component={FindPeopleScreen}
+      />
+      <Tab.Screen
+        name="Requests"
+        component={FriendRequestsScreen}
       />
       <Tab.Screen
         name="Settings"
