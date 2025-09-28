@@ -54,14 +54,14 @@ router.get('/all', auth, async (req, res) => {
     try {
         const myId = req.user.id;
         const me = await User.findById(myId).select('friends').lean();
-        const friendSet = new Set((me?.friends || []).map(id => id.toString()));
+        const friendIds = (me?.friends || []).map(id => id.toString());
+        const friendSet = new Set(friendIds);
 
-        // Gather pending requests related to me
+        // Pending requests
         const relatedRequests = await FriendRequest.find({
             $or: [{ sender: myId }, { receiver: myId }],
             status: 'pending'
         }).lean();
-
         const pendingOutgoing = new Set();
         const pendingIncoming = new Set();
         relatedRequests.forEach(r => {
@@ -69,39 +69,33 @@ router.get('/all', auth, async (req, res) => {
             else if (r.receiver.toString() === myId) pendingIncoming.add(r.sender.toString());
         });
 
-        // Fetch all users except me
-        const allUsers = await User.find({ _id: { $ne: myId } }).select('-password').lean();
-
-        // Pre-fetch last messages only for friends for efficiency
-        const friendIds = Array.from(friendSet);
+        // Aggregation to get last message per friend
         let lastMessagesMap = new Map();
         if (friendIds.length) {
-            // For each friend get last message (N queries) - could optimize later with aggregation
-            await Promise.all(friendIds.map(async fid => {
-                const lastMessage = await Message.findOne({
-                    $or: [
-                        { sender: myId, receiver: fid },
-                        { sender: fid, receiver: myId }
-                    ]
-                }).sort({ createdAt: -1 }).lean();
-                if (lastMessage) lastMessagesMap.set(fid, lastMessage);
-            }));
+            const lastMessages = await Message.aggregate([
+                { $match: { $or: friendIds.map(fid => ({ sender: { $in: [myId, fid] }, receiver: { $in: [myId, fid] } })) } },
+                { $sort: { createdAt: -1 } },
+                { $project: { sender: 1, receiver: 1, content: 1, createdAt: 1, status: 1 } },
+            ]);
+            // Keep first occurrence per friend
+            lastMessages.forEach(m => {
+                const otherId = m.sender.toString() === myId ? m.receiver.toString() : m.sender.toString();
+                if (!lastMessagesMap.has(otherId)) lastMessagesMap.set(otherId, m);
+            });
         }
 
+        const allUsers = await User.find({ _id: { $ne: myId } }).select('-password').lean();
         const decorated = allUsers.map(u => {
             const idStr = u._id.toString();
             const isFriend = friendSet.has(idStr);
-            const outgoing = pendingOutgoing.has(idStr);
-            const incoming = pendingIncoming.has(idStr);
             return {
                 ...u,
                 isFriend,
-                pendingOutgoing: outgoing,
-                pendingIncoming: incoming,
+                pendingOutgoing: pendingOutgoing.has(idStr),
+                pendingIncoming: pendingIncoming.has(idStr),
                 lastMessage: isFriend ? (lastMessagesMap.get(idStr) || null) : null
             };
         });
-
         res.json(decorated);
     } catch (err) {
         console.error(err.message);

@@ -114,6 +114,37 @@ router.post('/reject/:id', auth, async (req, res) => {
   }
 });
 
+// CANCEL OUTGOING FRIEND REQUEST
+router.post('/cancel/:id', auth, async (req, res) => {
+  try {
+    const request = await FriendRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ msg: 'Request not found.' });
+    if (request.sender.toString() !== req.user.id) {
+      return res.status(403).json({ msg: 'Not authorized.' });
+    }
+    if (request.status !== 'pending') {
+      return res.status(400).json({ msg: 'Request already processed.' });
+    }
+    await request.deleteOne();
+
+    // Notify receiver if online to update UI (remove incoming pending state)
+    try {
+      const onlineUsers = req.app.get('onlineUsers');
+      const receiverSocketId = onlineUsers.get(request.receiver.toString());
+      if (receiverSocketId && req.io) {
+        req.io.to(receiverSocketId).emit('friend:request:cancel', { from: request.sender.toString() });
+      }
+    } catch (e) {
+      console.error('Emit friend:request:cancel error', e.message);
+    }
+
+    res.json({ msg: 'Friend request canceled.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
 // LIST FRIENDS
 router.get('/list', auth, async (req, res) => {
   try {
@@ -130,6 +161,19 @@ router.get('/requests', auth, async (req, res) => {
   try {
     const requests = await FriendRequest.find({ receiver: req.user.id, status: 'pending' })
       .populate('sender', 'username displayName avatarUrl')
+      .sort({ createdAt: -1 });
+    res.json(requests);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Server Error');
+  }
+});
+
+// LIST OUTGOING PENDING REQUESTS
+router.get('/outgoing', auth, async (req, res) => {
+  try {
+    const requests = await FriendRequest.find({ sender: req.user.id, status: 'pending' })
+      .populate('receiver', 'username displayName avatarUrl')
       .sort({ createdAt: -1 });
     res.json(requests);
   } catch (err) {

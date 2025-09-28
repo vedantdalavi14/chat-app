@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
@@ -43,6 +44,8 @@ const HomeScreen = ({ navigation }) => {
   const [sending, setSending] = useState({}); // track add friend actions
   const [accepting, setAccepting] = useState({}); // track accept actions
   const [showProspectsOnly, setShowProspectsOnly] = useState(false); // filter for non-friends
+  const [search, setSearch] = useState('');
+  const [requestsMap, setRequestsMap] = useState({}); // senderId -> requestId for quick cancel
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -56,6 +59,13 @@ const HomeScreen = ({ navigation }) => {
           return bTime - aTime;
         });
         setUsers(sorted);
+        // build outgoing request map for cancel
+        try {
+          const reqRes = await axios.get(`${API_URL}/friends/requests`, { headers: { authorization: `Bearer ${token}` } });
+          const map = {};
+          reqRes.data.forEach(r => { /* incoming only, still store */ map[r.sender?._id] = r._id; });
+          setRequestsMap(map);
+        } catch (_) {}
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -138,18 +148,52 @@ const HomeScreen = ({ navigation }) => {
       });
     };
 
+    const handleFriendAccepted = ({ userA, userB }) => {
+      setUsers(prev => prev.map(u => (u._id === userA || u._id === userB) ? { ...u, isFriend: true, pendingIncoming: false, pendingOutgoing: false } : u));
+    };
+    const handleRequestCancel = ({ from }) => {
+      setUsers(prev => prev.map(u => u._id === from ? { ...u, pendingIncoming: false } : u));
+    };
+
     socket.on('users:online', handleUsersOnline);
     socket.on('user:connected', handleUserConnected);
     socket.on('user:disconnected', handleUserDisconnected);
     socket.on('message:new', handleNewMessage);
+    socket.on('friend:accepted', handleFriendAccepted);
+    socket.on('friend:request:cancel', handleRequestCancel);
 
     return () => {
       socket.off('users:online', handleUsersOnline);
       socket.off('user:connected', handleUserConnected);
       socket.off('user:disconnected', handleUserDisconnected);
       socket.off('message:new', handleNewMessage);
+      socket.off('friend:accepted', handleFriendAccepted);
+      socket.off('friend:request:cancel', handleRequestCancel);
     };
   }, []);
+
+  const cancelOutgoingRequest = async (userId) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      // find request where I am sender and receiver is userId -> need separate endpoint? we'll query both sides quickly
+      const list = await axios.get(`${API_URL}/friends/requests`, { headers: { authorization: `Bearer ${token}` } });
+      // requests endpoint returns only incoming for me; need outgoing query (not built) so implement workaround: create outgoing cancel route requires id, we can't get it from incoming. Simpler: add new endpoint? For now skip mapping and change backend? We'll add /friends/outgoing.
+    } catch (e) {}
+  };
+
+  const cancelPending = async (userId) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      // fetch outgoing requests (new endpoint) to find one with receiver = userId
+      const res = await axios.get(`${API_URL}/friends/outgoing`, { headers: { authorization: `Bearer ${token}` } });
+      const req = res.data.find(r => r.receiver === userId || r.receiver?._id === userId);
+      if (!req) { Alert.alert('Not found', 'Could not locate request.'); return; }
+      await axios.post(`${API_URL}/friends/cancel/${req._id}`, {}, { headers: { authorization: `Bearer ${token}` } });
+      setUsers(prev => prev.map(u => u._id === userId ? { ...u, pendingOutgoing: false } : u));
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.msg || 'Failed to cancel request');
+    }
+  };
 
   const renderUser = ({ item }) => {
     const isOnline = onlineUsers.has(item._id);
@@ -159,7 +203,14 @@ const HomeScreen = ({ navigation }) => {
     let actionButton = null;
     if (!item.isFriend) {
       if (item.pendingOutgoing) {
-        actionButton = <View style={[styles.badge, styles.pendingBadge]}><Text style={styles.badgeText}>Pending</Text></View>;
+        actionButton = (
+          <View style={styles.pendingRow}>
+            <View style={[styles.badge, styles.pendingBadge]}><Text style={styles.badgeText}>Pending</Text></View>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => cancelPending(item._id)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        );
       } else if (item.pendingIncoming) {
         actionButton = (
           <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} disabled={accepting[item._id]} onPress={() => acceptFriendRequest(item._id)}>
@@ -185,6 +236,7 @@ const HomeScreen = ({ navigation }) => {
               <View style={styles.avatar} />
             )}
             {isOnline && <View style={styles.onlineDot} />}
+            {item.isFriend ? <View style={styles.friendStar} /> : null}
           </View>
           <View style={styles.userInfo}>
             <View style={styles.userInfoTop}>
@@ -205,6 +257,13 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
+  const filteredUsers = (showProspectsOnly ? users.filter(u => !u.isFriend) : users)
+    .filter(u => {
+      const term = search.trim().toLowerCase();
+      if (!term) return true;
+      return (u.username && u.username.toLowerCase().includes(term)) || (u.displayName && u.displayName.toLowerCase().includes(term));
+    });
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -218,8 +277,17 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </View>
+      <View style={styles.searchBarWrapper}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search users..."
+          style={styles.searchInput}
+          placeholderTextColor="#888"
+        />
+      </View>
       <FlatList
-        data={showProspectsOnly ? users.filter(u => !u.isFriend) : users}
+        data={filteredUsers}
         renderItem={renderUser}
         keyExtractor={(item) => item._id}
         ListEmptyComponent={<Text style={styles.emptyText}>No users found.</Text>}
@@ -307,6 +375,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  friendStar: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    backgroundColor: '#FFD700',
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
   userInfo: {
     flex: 1,
     justifyContent: 'center',
@@ -365,6 +444,37 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelBtn: {
+    marginLeft: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#555',
+  },
+  cancelText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  searchBarWrapper: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchInput: {
+    backgroundColor: '#f2f2f2',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 40,
+    fontSize: 14,
+    color: '#111',
   },
 });
 
