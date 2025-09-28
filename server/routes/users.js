@@ -5,12 +5,20 @@ const User = require('../models/User');
 const Message = require('../models/Message'); // Import the Message model
 
 // @route   GET /users
-// @desc    Get all users and the last message exchanged with each
+// @desc    Get all FRIENDS and the last message exchanged with each
 // @access  Private
 router.get('/', auth, async (req, res) => {
     try {
-        // 1. Find all users except the current one
-        const users = await User.find({ _id: { $ne: req.user.id } }).select('-password').lean();
+        // Find current user's friends list
+        const me = await User.findById(req.user.id).select('friends').lean();
+        const friendIds = me?.friends || [];
+
+        if (friendIds.length === 0) {
+            return res.json([]);
+        }
+
+        // 1. Find all friend users
+        const users = await User.find({ _id: { $in: friendIds } }).select('-password').lean();
 
         // 2. For each user, find the last message exchanged with the logged-in user
         const usersWithLastMessage = await Promise.all(

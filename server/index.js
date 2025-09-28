@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const conversationRoutes = require('./routes/conversations');
 const profileRoutes = require('./routes/profile');
+const friendsRoutes = require('./routes/friends');
 const Message = require('./models/Message');
 
 const app = express();
@@ -37,6 +38,7 @@ app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/conversations', conversationRoutes);
 app.use('/profile', profileRoutes);
+app.use('/friends', friendsRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running!');
