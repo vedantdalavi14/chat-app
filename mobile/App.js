@@ -26,11 +26,24 @@ function AppTabs({ authContext }) {
   const [requestCount, setRequestCount] = useState(0);
 
   useEffect(() => {
+    // Initial fetch for existing pending requests
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          const res = await fetch('http://192.168.1.4:5000/friends/requests', { headers: { authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            setRequestCount(data.length || 0);
+          }
+        }
+      } catch (e) { console.warn('Initial requests fetch failed', e.message); }
+    })();
+
     const handleFriendRequest = () => {
       setRequestCount(c => c + 1);
     };
     const handleFriendAccepted = () => {
-      // On acceptance, could refresh friends list elsewhere; here just log
       console.log('Friendship accepted event received');
     };
     socket.on('friend:request', handleFriendRequest);
