@@ -42,6 +42,7 @@ const HomeScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState({}); // track add friend actions
   const [accepting, setAccepting] = useState({}); // track accept actions
+  const [showProspectsOnly, setShowProspectsOnly] = useState(false); // filter for non-friends
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -208,9 +209,17 @@ const HomeScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Global Chat</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.filterToggle, showProspectsOnly && styles.filterToggleActive]}
+            onPress={() => setShowProspectsOnly(v => !v)}
+          >
+            <Text style={styles.filterToggleText}>{showProspectsOnly ? 'Show All' : 'Only Not Friends'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <FlatList
-        data={users}
+        data={showProspectsOnly ? users.filter(u => !u.isFriend) : users}
         renderItem={renderUser}
         keyExtractor={(item) => item._id}
         ListEmptyComponent={<Text style={styles.emptyText}>No users found.</Text>}
@@ -237,11 +246,32 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 3 },
     elevation: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterToggle: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  filterToggleActive: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  filterToggleText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   userItem: {
     flexDirection: 'row',

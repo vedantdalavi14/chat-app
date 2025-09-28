@@ -11,7 +11,6 @@ import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
 import FriendsScreen from './screens/FriendsScreen';
-import FindPeopleScreen from './screens/FindPeopleScreen';
 import FriendRequestsScreen from './screens/FriendRequestsScreen';
 import ChatScreen from './screens/ChatScreen';
 import SettingsScreen from './screens/SettingsScreen'; // Import the new screen
@@ -83,8 +82,6 @@ function AppTabs({ authContext }) {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Friends') {
             iconName = focused ? 'people' : 'people-outline';
-          } else if (route.name === 'Find') {
-            iconName = focused ? 'person-add' : 'person-add-outline';
           } else if (route.name === 'Requests') {
             iconName = focused ? 'mail-unread' : 'mail-unread-outline';
           } else if (route.name === 'Settings') {
@@ -94,28 +91,12 @@ function AppTabs({ authContext }) {
         },
       })}
     >
-      <Tab.Screen
-        name="Global Chat"
-        children={(props) => <HomeScreen {...props} authContext={authContext} />}
-      />
-      <Tab.Screen
-        name="Friends"
-        component={FriendsScreen}
-      />
-      <Tab.Screen
-        name="Find"
-        component={FindPeopleScreen}
-      />
-      <Tab.Screen
-        name="Requests"
-        options={{ tabBarBadge: requestCount > 0 ? requestCount : undefined }}
-      >
+      <Tab.Screen name="Global Chat" children={(props) => <HomeScreen {...props} authContext={authContext} />} />
+      <Tab.Screen name="Friends" component={FriendsScreen} />
+      <Tab.Screen name="Requests" options={{ tabBarBadge: requestCount > 0 ? requestCount : undefined }}>
         {(props) => <FriendRequestsScreen {...props} onProcessed={onProcessed} />}
       </Tab.Screen>
-      <Tab.Screen
-        name="Settings"
-        children={(props) => <SettingsScreen {...props} authContext={authContext} />}
-      />
+      <Tab.Screen name="Settings" children={(props) => <SettingsScreen {...props} authContext={authContext} />} />
     </Tab.Navigator>
   );
 }
