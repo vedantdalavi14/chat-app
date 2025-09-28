@@ -93,7 +93,7 @@ function AppTabs({ authContext }) {
     >
       <Tab.Screen name="Global Chat" children={(props) => <HomeScreen {...props} authContext={authContext} />} />
       <Tab.Screen name="Friends" component={FriendsScreen} />
-      <Tab.Screen name="Requests" options={{ tabBarBadge: requestCount > 0 ? requestCount : undefined }}>
+  <Tab.Screen name="Requests" options={{ tabBarBadge: requestCount > 0 ? String(requestCount) : undefined }}>
         {(props) => <FriendRequestsScreen {...props} onProcessed={onProcessed} />}
       </Tab.Screen>
       <Tab.Screen name="Settings" children={(props) => <SettingsScreen {...props} authContext={authContext} />} />

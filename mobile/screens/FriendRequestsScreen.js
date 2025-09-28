@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,10 +12,13 @@ export default function FriendRequestsScreen({ onProcessed }) {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState({}); // map of requestId -> boolean
   const [refreshing, setRefreshing] = useState(false);
+  const inFlightRef = useRef(false);
 
   const fetchRequests = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      setLoading(true);
+      setLoading(prev => (prev ? prev : true));
       const token = await AsyncStorage.getItem('userToken');
       const res = await axios.get(`${API_URL}/friends/requests`, { headers: { authorization: `Bearer ${token}` } });
       setRequests(res.data);
@@ -23,6 +26,7 @@ export default function FriendRequestsScreen({ onProcessed }) {
       console.error('Requests fetch error', e.response?.data || e.message);
       Alert.alert('Error', 'Could not load friend requests');
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, []);
@@ -97,14 +101,16 @@ export default function FriendRequestsScreen({ onProcessed }) {
         </TouchableOpacity>
       </View>
       {loading ? (
-        <View style={styles.center}> <ActivityIndicator size="large" color={colors.primary} /></View>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
       ) : (
         <FlatList
           data={requests}
-            keyExtractor={item => item._id}
-            renderItem={renderItem}
-            ListEmptyComponent={<Text style={styles.empty}>No pending requests.</Text>}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          keyExtractor={item => item._id}
+          renderItem={renderItem}
+          ListEmptyComponent={<Text style={styles.empty}>No pending requests.</Text>}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         />
       )}
     </SafeAreaView>

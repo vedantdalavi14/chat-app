@@ -62,11 +62,11 @@ router.get('/all', auth, async (req, res) => {
             $or: [{ sender: myId }, { receiver: myId }],
             status: 'pending'
         }).lean();
-        const pendingOutgoing = new Set();
-        const pendingIncoming = new Set();
+        const pendingOutgoing = new Map(); // receiverId -> requestId
+        const pendingIncoming = new Map(); // senderId -> requestId
         relatedRequests.forEach(r => {
-            if (r.sender.toString() === myId) pendingOutgoing.add(r.receiver.toString());
-            else if (r.receiver.toString() === myId) pendingIncoming.add(r.sender.toString());
+            if (r.sender.toString() === myId) pendingOutgoing.set(r.receiver.toString(), r._id.toString());
+            else if (r.receiver.toString() === myId) pendingIncoming.set(r.sender.toString(), r._id.toString());
         });
 
         // Aggregation to get last message per friend
@@ -93,6 +93,8 @@ router.get('/all', auth, async (req, res) => {
                 isFriend,
                 pendingOutgoing: pendingOutgoing.has(idStr),
                 pendingIncoming: pendingIncoming.has(idStr),
+                pendingOutgoingRequestId: pendingOutgoing.get(idStr) || null,
+                pendingIncomingRequestId: pendingIncoming.get(idStr) || null,
                 lastMessage: isFriend ? (lastMessagesMap.get(idStr) || null) : null
             };
         });

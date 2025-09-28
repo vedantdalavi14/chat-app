@@ -45,7 +45,8 @@ const HomeScreen = ({ navigation }) => {
   const [accepting, setAccepting] = useState({}); // track accept actions
   const [showProspectsOnly, setShowProspectsOnly] = useState(false); // filter for non-friends
   const [search, setSearch] = useState('');
-  const [requestsMap, setRequestsMap] = useState({}); // senderId -> requestId for quick cancel
+  const [incomingRequestsMap, setIncomingRequestsMap] = useState({}); // senderId -> requestId (incoming)
+  const [outgoingRequestsMap, setOutgoingRequestsMap] = useState({}); // receiverId -> requestId (outgoing)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -59,13 +60,15 @@ const HomeScreen = ({ navigation }) => {
           return bTime - aTime;
         });
         setUsers(sorted);
-        // build outgoing request map for cancel
-        try {
-          const reqRes = await axios.get(`${API_URL}/friends/requests`, { headers: { authorization: `Bearer ${token}` } });
-          const map = {};
-          reqRes.data.forEach(r => { /* incoming only, still store */ map[r.sender?._id] = r._id; });
-          setRequestsMap(map);
-        } catch (_) {}
+        // Build maps directly from decorated data (pendingIncomingRequestId / pendingOutgoingRequestId)
+        const inMap = {};
+        const outMap = {};
+        sorted.forEach(u => {
+          if (u.pendingIncoming && u.pendingIncomingRequestId) inMap[u._id] = u.pendingIncomingRequestId;
+          if (u.pendingOutgoing && u.pendingOutgoingRequestId) outMap[u._id] = u.pendingOutgoingRequestId;
+        });
+        setIncomingRequestsMap(inMap);
+        setOutgoingRequestsMap(outMap);
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -78,7 +81,11 @@ const HomeScreen = ({ navigation }) => {
     try {
       setSending(p => ({ ...p, [userId]: true }));
       const token = await AsyncStorage.getItem('userToken');
-      await axios.post(`${API_URL}/friends/request/${userId}`, {}, { headers: { authorization: `Bearer ${token}` } });
+      const res = await axios.post(`${API_URL}/friends/request/${userId}`, {}, { headers: { authorization: `Bearer ${token}` } });
+      const fr = res.data;
+      if (fr && fr._id) {
+        setOutgoingRequestsMap(m => ({ ...m, [userId]: fr._id }));
+      }
       setUsers(prev => prev.map(u => u._id === userId ? { ...u, pendingOutgoing: true } : u));
     } catch (e) {
       Alert.alert('Error', e.response?.data?.msg || 'Failed to send request');
@@ -150,9 +157,27 @@ const HomeScreen = ({ navigation }) => {
 
     const handleFriendAccepted = ({ userA, userB }) => {
       setUsers(prev => prev.map(u => (u._id === userA || u._id === userB) ? { ...u, isFriend: true, pendingIncoming: false, pendingOutgoing: false } : u));
+      // Clean any mapping (we don't know which side we are here but safe to delete both ids)
+      setOutgoingRequestsMap(prev => {
+        const copy = { ...prev };
+        delete copy[userA];
+        delete copy[userB];
+        return copy;
+      });
+      setIncomingRequestsMap(prev => {
+        const copy = { ...prev };
+        delete copy[userA];
+        delete copy[userB];
+        return copy;
+      });
     };
     const handleRequestCancel = ({ from }) => {
       setUsers(prev => prev.map(u => u._id === from ? { ...u, pendingIncoming: false } : u));
+      setIncomingRequestsMap(prev => {
+        const copy = { ...prev };
+        delete copy[from];
+        return copy;
+      });
     };
 
     socket.on('users:online', handleUsersOnline);
@@ -184,12 +209,22 @@ const HomeScreen = ({ navigation }) => {
   const cancelPending = async (userId) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      // fetch outgoing requests (new endpoint) to find one with receiver = userId
-      const res = await axios.get(`${API_URL}/friends/outgoing`, { headers: { authorization: `Bearer ${token}` } });
-      const req = res.data.find(r => r.receiver === userId || r.receiver?._id === userId);
-      if (!req) { Alert.alert('Not found', 'Could not locate request.'); return; }
-      await axios.post(`${API_URL}/friends/cancel/${req._id}`, {}, { headers: { authorization: `Bearer ${token}` } });
+      let requestId = outgoingRequestsMap[userId];
+      // Fallback still available if needed (network race) - only if no id known
+      if (!requestId) {
+        try {
+          const res = await axios.get(`${API_URL}/friends/outgoing`, { headers: { authorization: `Bearer ${token}` } });
+          const match = res.data.find(r => r.receiver === userId || r.receiver?._id === userId);
+          if (match) {
+            requestId = match._id;
+            setOutgoingRequestsMap(m => ({ ...m, [userId]: requestId }));
+          }
+        } catch (e) {}
+      }
+      if (!requestId) { Alert.alert('Not found', 'Could not locate request id.'); return; }
+      await axios.post(`${API_URL}/friends/cancel/${requestId}`, {}, { headers: { authorization: `Bearer ${token}` } });
       setUsers(prev => prev.map(u => u._id === userId ? { ...u, pendingOutgoing: false } : u));
+      setOutgoingRequestsMap(m => { const copy = { ...m }; delete copy[userId]; return copy; });
     } catch (e) {
       Alert.alert('Error', e.response?.data?.msg || 'Failed to cancel request');
     }
