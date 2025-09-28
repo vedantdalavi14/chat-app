@@ -154,7 +154,7 @@ const HomeScreen = ({ navigation }) => {
   const renderUser = ({ item }) => {
     const isOnline = onlineUsers.has(item._id);
     const nameToDisplay = item.displayName || item.username;
-    const showChat = item.isFriend;
+    const showChat = item.isFriend; // currently restricts
 
     let actionButton = null;
     if (!item.isFriend) {
@@ -177,7 +177,7 @@ const HomeScreen = ({ navigation }) => {
 
     return (
       <View style={styles.userItem}>
-        <TouchableOpacity style={styles.userTap} disabled={!showChat} onPress={() => showChat && navigation.navigate('Chat', { userId: item._id, username: nameToDisplay, avatarUrl: item.avatarUrl })}>
+        <TouchableOpacity style={styles.userTap} onPress={() => navigation.navigate('Chat', { userId: item._id, username: nameToDisplay, avatarUrl: item.avatarUrl })}>
           <View style={styles.avatarContainer}>
             {item.avatarUrl ? (
               <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
