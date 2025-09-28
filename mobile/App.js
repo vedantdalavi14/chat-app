@@ -21,8 +21,31 @@ import colors from './theme/colors';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator(); // Create a tab navigator instance
 
-// This component will be the main UI after logging in, containing the tabs
+// Wrap tabs to manage request count badge
 function AppTabs({ authContext }) {
+  const [requestCount, setRequestCount] = useState(0);
+
+  useEffect(() => {
+    const handleFriendRequest = () => {
+      setRequestCount(c => c + 1);
+    };
+    const handleFriendAccepted = () => {
+      // On acceptance, could refresh friends list elsewhere; here just log
+      console.log('Friendship accepted event received');
+    };
+    socket.on('friend:request', handleFriendRequest);
+    socket.on('friend:accepted', handleFriendAccepted);
+    return () => {
+      socket.off('friend:request', handleFriendRequest);
+      socket.off('friend:accepted', handleFriendAccepted);
+    };
+  }, []);
+
+  const onProcessed = () => {
+    // Decrement when a request is actioned locally
+    setRequestCount(c => (c > 0 ? c - 1 : 0));
+  };
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -72,8 +95,10 @@ function AppTabs({ authContext }) {
       />
       <Tab.Screen
         name="Requests"
-        component={FriendRequestsScreen}
-      />
+        options={{ tabBarBadge: requestCount > 0 ? requestCount : undefined }}
+      >
+        {(props) => <FriendRequestsScreen {...props} onProcessed={onProcessed} />}
+      </Tab.Screen>
       <Tab.Screen
         name="Settings"
         children={(props) => <SettingsScreen {...props} authContext={authContext} />}

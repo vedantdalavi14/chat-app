@@ -36,6 +36,18 @@ router.post('/request/:receiverId', auth, async (req, res) => {
     }
 
     const fr = await FriendRequest.create({ sender: senderId, receiver: receiverId });
+
+    // Emit realtime event to receiver if online
+    try {
+      const onlineUsers = req.app.get('onlineUsers');
+      const receiverSocketId = onlineUsers.get(receiverId.toString());
+      if (receiverSocketId && req.io) {
+        req.io.to(receiverSocketId).emit('friend:request', { requestId: fr._id, from: senderId });
+      }
+    } catch (e) {
+      console.error('Emit friend:request error', e.message);
+    }
+
     res.status(201).json(fr);
   } catch (err) {
     console.error(err);
@@ -60,6 +72,20 @@ router.post('/accept/:id', auth, async (req, res) => {
 
     await User.updateOne({ _id: request.sender }, { $addToSet: { friends: request.receiver } });
     await User.updateOne({ _id: request.receiver }, { $addToSet: { friends: request.sender } });
+
+    // Emit accepted event to both users if online
+    try {
+      const onlineUsers = req.app.get('onlineUsers');
+      if (req.io) {
+        const senderSocketId = onlineUsers.get(request.sender.toString());
+        const receiverSocketId = onlineUsers.get(request.receiver.toString());
+        const payload = { userA: request.sender.toString(), userB: request.receiver.toString() };
+        if (senderSocketId) req.io.to(senderSocketId).emit('friend:accepted', payload);
+        if (receiverSocketId) req.io.to(receiverSocketId).emit('friend:accepted', payload);
+      }
+    } catch (e) {
+      console.error('Emit friend:accepted error', e.message);
+    }
 
     res.json({ msg: 'Friend request accepted.' });
   } catch (err) {

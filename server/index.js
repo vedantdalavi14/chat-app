@@ -46,6 +46,14 @@ app.get('/', (req, res) => {
 
 // --- Socket.IO Logic ---
 const onlineUsers = new Map();
+// Expose onlineUsers map to routes via app locals
+app.set('onlineUsers', onlineUsers);
+
+// Middleware to attach io to request (scoped before route mounting)
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 io.on('connection', (socket) => {
   console.log('a user connected:', socket.id);
